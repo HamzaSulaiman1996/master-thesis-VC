@@ -26,6 +26,8 @@ from .vit_mae import VisionTransformer
 from .x3d import X3D
 from .resnet_vtn import RESNET_BACKBONE
 from .vit_2d import ViT2D
+from .regnet import Regnet
+from .transformer_tubelet import TransformerTubelet
 
 __all__ = [
     'AAGCN', 'C2D', 'C3D', 'MViT', 'MobileNetV2', 'MobileNetV2TSM',
@@ -33,7 +35,7 @@ __all__ = [
     'ResNet3dLayer', 'ResNet3dSlowFast', 'ResNet3dSlowOnly', 'ResNetAudio',
     'ResNetTIN', 'ResNetTSM', 'STGCN', 'SwinTransformer3D', 'TANet',
     'TimeSformer', 'UniFormer', 'UniFormerV2', 'VisionTransformer', 'X3D',
-    'RGBPoseConv3D', 'RESNET_BACKBONE','ViT2D'
+    'RGBPoseConv3D', 'RESNET_BACKBONE','ViT2D','Regnet','TransformerTubelet'
 ]
 
 try:

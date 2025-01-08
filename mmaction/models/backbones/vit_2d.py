@@ -32,11 +32,16 @@ class ViT2D(BaseModule):
 
         super().init_weights()
 
+        # if self.freeze:
+        #     frozen_layers = []
+        #     for name,weights in self.named_parameters():
+        #         weights.requires_grad = False
+        #         frozen_layers.append(name)
+
+    def _freeze_stages(self):
         if self.freeze:
-            frozen_layers = []
-            for name,weights in self.named_parameters():
-                weights.requires_grad = False
-                frozen_layers.append(name)
+            for _,weights in self.named_parameters():
+                    weights.requires_grad = False
     
 
     def forward(self,x:torch.Tensor):
@@ -45,3 +50,9 @@ class ViT2D(BaseModule):
         x = self.backbone(x)
         x = x.reshape(B, F, -1)
         return x
+    
+
+    def train(self, mode: bool = True) -> None:
+        """Convert the model into training mode while keep layers frozen."""
+        super(ViT2D, self).train(mode)
+        self._freeze_stages()

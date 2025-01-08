@@ -8,6 +8,7 @@ from mmengine.logging import MMLogger
 from mmengine.model.weight_init import constant_init, kaiming_init
 from mmengine.runner import load_checkpoint
 from mmengine.utils.dl_utils.parrots_wrapper import _BatchNorm
+from mmengine.model import BaseModule
 
 from mmaction.registry import MODELS
 
@@ -177,7 +178,7 @@ class BlockX3D(nn.Module):
 
 # We do not support initialize with 2D pretrain weight for X3D
 @MODELS.register_module()
-class X3D(nn.Module):
+class X3D(BaseModule):
     """X3D backbone. https://arxiv.org/pdf/2004.04730.pdf.
 
     Args:
@@ -224,7 +225,7 @@ class X3D(nn.Module):
                  in_channels=3,
                  num_stages=4,
                  spatial_strides=(2, 2, 2, 2),
-                 frozen_stages=-1,
+                 freeze=False,
                  se_style='half',
                  se_ratio=1 / 16,
                  use_swish=True,
@@ -258,7 +259,7 @@ class X3D(nn.Module):
         assert 1 <= num_stages <= 4
         self.spatial_strides = spatial_strides
         assert len(spatial_strides) == num_stages
-        self.frozen_stages = frozen_stages
+        self.freeze = freeze
 
         self.se_style = se_style
         assert self.se_style in ['all', 'half']
@@ -465,22 +466,22 @@ class X3D(nn.Module):
             norm_cfg=self.norm_cfg,
             act_cfg=self.act_cfg)
 
-    def _freeze_stages(self):
-        """Prevent all the parameters from being optimized before
-        ``self.frozen_stages``."""
-        if self.frozen_stages >= 0:
-            self.conv1_s.eval()
-            self.conv1_t.eval()
-            for param in self.conv1_s.parameters():
-                param.requires_grad = False
-            for param in self.conv1_t.parameters():
-                param.requires_grad = False
+    # def _freeze_stages(self):
+    #     """Prevent all the parameters from being optimized before
+    #     ``self.frozen_stages``."""
+    #     if self.frozen_stages >= 0:
+    #         self.conv1_s.eval()
+    #         self.conv1_t.eval()
+    #         for param in self.conv1_s.parameters():
+    #             param.requires_grad = False
+    #         for param in self.conv1_t.parameters():
+    #             param.requires_grad = False
 
-        for i in range(1, self.frozen_stages + 1):
-            m = getattr(self, f'layer{i}')
-            m.eval()
-            for param in m.parameters():
-                param.requires_grad = False
+    #     for i in range(1, self.frozen_stages + 1):
+    #         m = getattr(self, f'layer{i}')
+    #         m.eval()
+    #         for param in m.parameters():
+    #             param.requires_grad = False
 
     def init_weights(self):
         """Initiate the parameters either from existing checkpoint or from
@@ -504,6 +505,14 @@ class X3D(nn.Module):
                         constant_init(m.conv3.bn, 0)
         else:
             raise TypeError('pretrained must be a str or None')
+        
+    def _freeze(self):
+        frozen_layers = []
+        if not self.freeze:
+            return
+        for name,weights in self.named_parameters():
+                weights.requires_grad = False
+                frozen_layers.append(name)
 
     def forward(self, x):
         """Defines the computation performed at every call.
@@ -526,7 +535,8 @@ class X3D(nn.Module):
     def train(self, mode=True):
         """Set the optimization status when training."""
         super().train(mode)
-        self._freeze_stages()
+        self._freeze()
+        # self._freeze_stages()
         if mode and self.norm_eval:
             for m in self.modules():
                 if isinstance(m, _BatchNorm):
