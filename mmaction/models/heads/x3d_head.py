@@ -40,16 +40,20 @@ class X3DHead(BaseHead):
             self.dropout = nn.Dropout(p=self.dropout_ratio)
         else:
             self.dropout = None
+        
         self.in_channels = in_channels
         self.mid_channels = 2048
         self.num_classes = num_classes
         self.fc1_bias = fc1_bias
+        self.relu = nn.ReLU()
 
         self.fc1 = nn.Linear(
             self.in_channels, self.mid_channels, bias=self.fc1_bias)
-        self.fc2 = nn.Linear(self.mid_channels, self.num_classes)
+        self.fc2 = nn.Linear(self.mid_channels, self.mid_channels // 2)
+        self.fc3 = nn.Linear(self.mid_channels // 2, self.num_classes)
 
-        self.relu = nn.ReLU()
+        self.bn1 = nn.BatchNorm1d(self.mid_channels)
+        self.bn2 = nn.BatchNorm1d(self.mid_channels // 2)
 
         self.pool = None
         if self.spatial_type == 'avg':
@@ -63,6 +67,7 @@ class X3DHead(BaseHead):
         """Initiate the parameters from scratch."""
         normal_init(self.fc1, std=self.init_std)
         normal_init(self.fc2, std=self.init_std)
+        normal_init(self.fc3, std=self.init_std)
 
     def forward(self, x: Tensor, **kwargs) -> Tensor:
         """Defines the computation performed at every call.
@@ -81,12 +86,18 @@ class X3DHead(BaseHead):
         x = x.view(x.shape[0], -1)
         # [N, in_channels]
         x = self.fc1(x)
+        x = self.bn1(x)
         # [N, 2048]
+        x = self.relu(x)
+
+        x = self.fc2(x)
+        x = self.bn2(x)
         x = self.relu(x)
 
         if self.dropout is not None:
             x = self.dropout(x)
 
-        cls_score = self.fc2(x)
+        cls_score = self.fc3(x)
+
         # [N, num_classes]
         return cls_score
