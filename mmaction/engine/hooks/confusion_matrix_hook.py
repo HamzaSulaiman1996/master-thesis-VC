@@ -32,14 +32,25 @@ class ConfusionMatrixHook(Hook):
         self.num_classes = len(self.classes)
         self.out_dir = out_dir
         
-
-    # def before_run(self, runner:Runner) -> None:
-    #     self.cfmatrix = []
+    def before_run(self, runner:Runner) -> None:
+        mlflow.log_artifact(self.class_map)
 
     def before_val_epoch(self, runner:Runner) -> None:
         self.cfmatrix = []
+    
+    def before_test_epoch(self, runner:Runner) -> None:
+        self.cfmatrix = []
 
     def after_val_iter(self, runner:Runner, batch_idx: int, data_batch: dict , outputs: Sequence[ActionDataSample]) -> None:
+        for data_sample in outputs:
+            pred_label = data_sample.get('pred_label').cpu()
+            gt_label = data_sample.get('gt_label').cpu()
+
+            self.cfmatrix.append({
+                'pred_label': pred_label,
+                'gt_label': gt_label
+            })
+    def after_test_iter(self, runner:Runner, batch_idx: int, data_batch: dict , outputs: Sequence[ActionDataSample]) -> None:
         for data_sample in outputs:
             pred_label = data_sample.get('pred_label').cpu()
             gt_label = data_sample.get('gt_label').cpu()
@@ -52,18 +63,6 @@ class ConfusionMatrixHook(Hook):
     def after_val_epoch(self, runner:Runner, metrics) -> None:
         out_path = self._compute_matrix(runner)
         mlflow.log_artifact(str(out_path),artifact_path='confusion matrix')
-
-
-
-    def after_test_iter(self, runner:Runner, batch_idx: int, data_batch: dict , outputs: Sequence[ActionDataSample]) -> None:
-        for data_sample in outputs:
-            pred_label = data_sample.get('pred_label').cpu()
-            gt_label = data_sample.get('gt_label').cpu()
-
-            self.cfmatrix.append({
-                'pred_label': pred_label,
-                'gt_label': gt_label
-            })
 
     def after_test_epoch(self, runner:Runner, metrics) -> None:
         out_path = self._compute_matrix(runner)
