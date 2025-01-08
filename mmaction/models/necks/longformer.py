@@ -3,7 +3,6 @@ from transformers import LongformerModel, LongformerConfig
 import torch.nn.functional as F
 from mmengine.model import BaseModule
 from mmaction.registry import MODELS
-from torch import Tensor
 import torch.nn as nn
 from typing import Optional
 
@@ -21,6 +20,7 @@ class VTNLongformerModel(BaseModule):
                  attention_probs_dropout_prob,
                  hidden_dropout_prob,
                  init_cfg=None,
+                 freeze: bool = False
                  ):
         self.embed_dim = embed_dim
         self.max_position_embeddings = max_position_embeddings
@@ -32,6 +32,7 @@ class VTNLongformerModel(BaseModule):
         self.intermediate_size = intermediate_size
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.hidden_dropout_prob = hidden_dropout_prob
+        self.freeze = freeze
         
 
 
@@ -105,6 +106,17 @@ class VTNLongformerModel(BaseModule):
         # MLP head
         x = x["last_hidden_state"] # type: ignore
         return x,loss_aux
+    
+    def _freeze_stages(self):
+        if self.freeze:
+            for _,weights in self.named_parameters():
+                    weights.requires_grad = False
+
+
+    def train(self, mode: bool = True) -> None:
+        """Convert the model into training mode while keep layers frozen."""
+        super(VTNLongformerModel, self).train(mode)
+        self._freeze_stages()
 
 
 
