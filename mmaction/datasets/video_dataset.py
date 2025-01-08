@@ -74,6 +74,32 @@ class VideoDataset(BaseActionDataset):
             modality=modality,
             test_mode=test_mode,
             **kwargs)
+        
+
+        self.data = self.load_data_list().copy()
+        self.labels = [i['label'] for i in self.data]
+
+        self._all_classes = len(set(self.labels))
+        self._label_counts = {cls: self.labels.count(cls) for cls in set(self.labels)}
+        self._weights = self._compute_weights()
+
+    def _compute_weights(self):
+        weight_by_class = {cls: 1 / (self._all_classes * self._label_counts[cls]) for cls in self._label_counts}
+        return [weight_by_class[lbl] for lbl in self.labels]
+
+
+    @property
+    def weights(self):
+        return self._weights.copy()
+
+    @property
+    def num_samples(self):
+        return len(self.data)
+    
+    @property
+    def all_classes(self):
+        return self._all_classes
+
 
     def load_data_list(self) -> List[dict]:
         """Load annotation file to get video information."""
