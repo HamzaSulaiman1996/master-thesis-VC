@@ -4,6 +4,60 @@ from torch import Tensor
 from mmengine.model import BaseModule
 from mmaction.registry import MODELS
 from mmengine.model.weight_init import normal_init,constant_init
+import collections.abc
+from typing import Tuple, Iterable,Optional,Union,Dict,List
+
+class VideoMAEPatchEmbeddings(nn.Module):
+    """
+    Video to Patch Embedding. This module turns a batch of videos of shape (batch_size, num_frames, num_channels,
+    height, width) into a tensor of shape (batch_size, seq_len, hidden_size) to be consumed by a Transformer encoder.
+
+    The seq_len (the number of patches) equals (number of frames // tubelet_size) * (height // patch_size) * (width //
+    patch_size).
+
+    """
+
+    def __init__(self,
+                image_size:Tuple[int,int] | Iterable[int],
+                patch_size:Tuple[int,int] | Iterable[int],
+                num_channels:int,
+                hidden_size:int,
+                num_frames:int,
+                tubelet_size:int,
+                ):
+        super().__init__()
+
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.tubelet_size = int(tubelet_size)
+        num_patches = (
+            (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0]) * (num_frames // self.tubelet_size)
+        )
+        self.num_channels = num_channels
+        self.num_patches = num_patches
+        self.projection = nn.Conv3d(
+            in_channels=num_channels,
+            out_channels=hidden_size,
+            kernel_size=(self.tubelet_size, patch_size[0], patch_size[1]),
+            stride=(self.tubelet_size, patch_size[0], patch_size[1]),
+        )
+
+    def forward(self, pixel_values):
+        batch_size, num_frames, num_channels, height, width = pixel_values.shape
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        if height != self.image_size[0] or width != self.image_size[1]:
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+            )
+        # permute to (batch_size, num_channels, num_frames, height, width)
+        pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
+        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        return embeddings
 
 
 @MODELS.register_module()
@@ -192,4 +246,95 @@ class TransformerNew(BaseModule):
     def train(self, mode: bool = True) -> None:
         """Convert the model into training mode while keep layers frozen."""
         super(TransformerNew, self).train(mode)
+        self._freeze_stages()
+
+
+
+@MODELS.register_module()
+class TransformerTubelet(BaseModule):
+    def __init__(self,
+                 feature_inchannels:int=768,
+                 sample_frames:int=16,
+                 tubelet_size:int=8,
+                 tubelet_feature_size:int=128,
+                 image_size:Tuple[int,int]=(14,14),
+                 patch_size:Tuple[int,int]=(7,7),
+                 transformer_heads:int = 2,
+                 transformer_layers:int=1,
+                 transformer_ffn:int = 256,
+                 dropout:float=0.1,
+                 add_cls_token:bool = True,
+                 freeze:bool=False,
+                 init_cfg: Optional[Union[Dict, List[Dict]]] = [
+                     dict(
+                         type='TruncNormal', layer='Linear', std=0.02,
+                         bias=0.),
+                     dict(type='Constant', layer='LayerNorm', val=1., bias=0.)
+                     ]
+                ):
+        
+
+        super().__init__(init_cfg=init_cfg)
+        
+        self.freeze = freeze
+        self.add_cls_token = add_cls_token
+
+        num_patches = (
+            (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0]) * (sample_frames // tubelet_size)
+        )
+
+        encoder_layer = TransformerEncoderLayerWithAttention(feat=tubelet_feature_size, nhead=transformer_heads, dropout=dropout,
+                                                              dim_feedforward=transformer_ffn)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=transformer_layers)
+
+        pos_embed = self.get_sinusoid_encoding(num_patches + 1, tubelet_feature_size) if self.add_cls_token else self.get_sinusoid_encoding(num_patches, tubelet_feature_size)
+        self.register_buffer('pos_embed', pos_embed)
+        
+        self.patch = VideoMAEPatchEmbeddings(
+            image_size=image_size,
+            patch_size=patch_size,
+            num_channels=feature_inchannels,
+            hidden_size=tubelet_feature_size,
+            num_frames=sample_frames,
+            tubelet_size=tubelet_size,
+            )
+
+        if self.add_cls_token:
+            self.cls_token = nn.Parameter(torch.randn(1, 1, tubelet_feature_size))
+
+    def get_sinusoid_encoding(self, n_position: int, embed_dims: int) -> Tensor:
+        """Generate sinusoid encoding table."""
+        vec = torch.arange(embed_dims, dtype=torch.float64)
+        vec = (vec - vec % 2) / embed_dims
+        vec = torch.pow(10000, -vec).view(1, -1)
+
+        sinusoid_table = torch.arange(n_position).view(-1, 1) * vec
+        sinusoid_table[:, 0::2].sin_()  # dim 2i
+        sinusoid_table[:, 1::2].cos_()  # dim 2i+1
+
+        sinusoid_table = sinusoid_table.to(torch.float32)
+
+        return sinusoid_table.unsqueeze(0)  # Shape: (1, n_position, embed_dims)
+        
+    def _freeze_stages(self):
+        if self.freeze:
+            for _,weights in self.named_parameters():
+                    weights.requires_grad = False
+
+
+    def forward(self, x: Tensor, data_samples=None):
+        loss_aux = dict()
+        b,_,_,_,_ = x.shape
+        x = self.patch(x)
+        if self.add_cls_token:
+            cls_tokens = self.cls_token.expand(b, -1, -1)
+            x = torch.cat((cls_tokens, x), dim=1)
+
+        x = x + self.pos_embed
+        x = self.transformer_encoder(x)
+        return x,loss_aux
+    
+    def train(self, mode: bool = True) -> None:
+        """Convert the model into training mode while keep layers frozen."""
+        super(TransformerTubelet, self).train(mode)
         self._freeze_stages()
