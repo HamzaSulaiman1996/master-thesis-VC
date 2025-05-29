@@ -11,8 +11,6 @@ from mmaction.registry import MODELS
 from mmaction.utils import (ConfigType, ForwardResults, OptConfigType,
                             OptSampleList, SampleList)
 
-import mlflow
-
 
 class BaseRecognizer(BaseModel, metaclass=ABCMeta):
     """Base class for recognizers.
@@ -157,12 +155,7 @@ class BaseRecognizer(BaseModel, metaclass=ABCMeta):
 
             # avoid repeated initialization
             self.backbone.init_weights = fake_init
-        super().init_weights()
-        # if self.backbone_cfg.get('freeze'):
-        #     frozen_layers = []
-        #     for name,weights in self.backbone.named_parameters():
-        #         weights.requires_grad = False
-        #         frozen_layers.append(name)                
+        super().init_weights()          
 
 
     def loss(self, inputs: torch.Tensor, data_samples: SampleList,
