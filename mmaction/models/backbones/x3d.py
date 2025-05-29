@@ -464,24 +464,8 @@ class X3D(BaseModule):
             bias=False,
             conv_cfg=self.conv_cfg,
             norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg)
-
-    # def _freeze_stages(self):
-    #     """Prevent all the parameters from being optimized before
-    #     ``self.frozen_stages``."""
-    #     if self.frozen_stages >= 0:
-    #         self.conv1_s.eval()
-    #         self.conv1_t.eval()
-    #         for param in self.conv1_s.parameters():
-    #             param.requires_grad = False
-    #         for param in self.conv1_t.parameters():
-    #             param.requires_grad = False
-
-    #     for i in range(1, self.frozen_stages + 1):
-    #         m = getattr(self, f'layer{i}')
-    #         m.eval()
-    #         for param in m.parameters():
-    #             param.requires_grad = False
+            act_cfg=self.act_cfg,
+        )
 
     def init_weights(self):
         """Initiate the parameters either from existing checkpoint or from
@@ -536,7 +520,6 @@ class X3D(BaseModule):
         """Set the optimization status when training."""
         super().train(mode)
         self._freeze()
-        # self._freeze_stages()
         if mode and self.norm_eval:
             for m in self.modules():
                 if isinstance(m, _BatchNorm):
