@@ -8,7 +8,8 @@ import torch
 class ViT2D(BaseModule):
     def __init__(
             self,
-            pretrained:Optional[str] = None,
+            pretrained:bool = True, # pretrained weights from vit_base_patch16_224
+            load_weights: Optional[str] = None, # custom pretrained weights
             freeze: bool = False,
             init_cfg: Optional[Union[Dict, List[Dict]]] = [
                      dict(
@@ -17,20 +18,27 @@ class ViT2D(BaseModule):
                      dict(type='Constant', layer='LayerNorm', val=1., bias=0.)
                  ],
 
-            
+
     ):
         self.pretrained = pretrained
         self.freeze = freeze
+        self.load_weights = load_weights
+        if self.load_weights and self.pretrained:
+            raise ValueError('load_weights and pretrained cannot be true at the same time')
+        
         super().__init__(init_cfg=init_cfg)
 
         self.backbone = vit_base_patch16_224(pretrained=bool(self.pretrained),num_classes=0)
         
 
     def init_weights(self):
-        if self.pretrained :
-            self.init_cfg = dict(type='Pretrained', checkpoint=self.pretrained)
 
-        super().init_weights()
+        if self.load_weights:
+            self.init_cfg = dict(type='Pretrained', checkpoint=self.load_weights)
+            super().init_weights()
+
+        elif self.pretrained:
+            return None
 
     def _freeze_stages(self):
         if self.freeze:
@@ -57,7 +65,8 @@ class ViT2D(BaseModule):
 class ViTubelet(BaseModule):
     def __init__(
             self,
-            pretrained:Optional[str] = None,
+            pretrained:bool = True, # pretrained weights from vit_base_patch16_224
+            load_weights: Optional[str] = None, # custom pretrained weights
             freeze: bool = False,
             init_cfg: Optional[Union[Dict, List[Dict]]] = [
                      dict(
@@ -67,12 +76,18 @@ class ViTubelet(BaseModule):
                  ],            
     ):
         
+        
         self.pretrained = pretrained
         self.freeze = freeze
+        self.load_weights = load_weights
+
+        if self.load_weights and self.pretrained:
+            raise ValueError('load_weights and pretrained cannot be true at the same time')
+
         super().__init__(init_cfg=init_cfg)
 
         self.backbone = vit_base_patch16_224(
-        pretrained=bool(pretrained),
+        pretrained=self.pretrained,
         num_classes=0,
         features_only=True,
         out_indices=1,
@@ -80,10 +95,16 @@ class ViTubelet(BaseModule):
 
 
     def init_weights(self):
-        if self.pretrained :
-            self.init_cfg = dict(type='Pretrained', checkpoint=self.pretrained)
 
-        super().init_weights()
+        if self.load_weights:
+            self.init_cfg = dict(type='Pretrained', checkpoint=self.load_weights)
+            super().init_weights()
+
+        elif self.pretrained:
+            return None
+
+        
+        
 
     def _freeze_stages(self):
         if self.freeze:
