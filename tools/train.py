@@ -7,12 +7,16 @@ from mmengine.config import Config, DictAction
 from mmengine.runner import Runner
 
 from mmaction.registry import RUNNERS
+import mlflow
+import uuid
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a action recognizer')
     parser.add_argument('config', help='train config file path')
     parser.add_argument('--work-dir', help='the dir to save logs and models')
+    parser.add_argument('--num-iter',type=int, default=1, help='number of runs')
+    parser.add_argument('--tags',nargs='+',action=DictAction)
     parser.add_argument(
         '--resume',
         nargs='?',
@@ -120,23 +124,29 @@ def merge_args(cfg, args):
 
 def main():
     args = parse_args()
-
     cfg = Config.fromfile(args.config)
+    root = args.work_dir
+    identifier = {
+        'identifier': str(uuid.uuid4())
+        }
+    with mlflow.start_run(tags=identifier):
+        for iter in range(args.num_iter):
+            args.work_dir = f"{root}/seed_{iter}"
+            # merge cli arguments to config
+            cfg = merge_args(cfg, args)
 
-    # merge cli arguments to config
-    cfg = merge_args(cfg, args)
-
-    # build the runner from config
-    if 'runner_type' not in cfg:
-        # build the default runner
-        runner = Runner.from_cfg(cfg)
-    else:
-        # build customized runner from the registry
-        # if 'runner_type' is set in the cfg
-        runner = RUNNERS.build(cfg)
-
-    # start training
-    runner.train()
+            if 'runner_type' not in cfg:
+                # build the default runner
+                runner = Runner.from_cfg(cfg)
+            else:
+                # build customized runner from the registry
+                # if 'runner_type' is set in the cfg
+                runner = RUNNERS.build(cfg)
+            
+            args.tags.update(experiment_id=runner.experiment_name, **identifier)
+            with mlflow.start_run(nested=True,tags=args.tags):
+                mlflow.log_param('child',iter)
+                runner.train()
 
 
 if __name__ == '__main__':

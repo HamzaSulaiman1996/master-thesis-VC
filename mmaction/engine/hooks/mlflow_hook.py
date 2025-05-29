@@ -10,8 +10,6 @@ import os
 import glob
 import torch
 from collections import defaultdict
-from typing import Optional
-import numpy as np
 
 import importlib.util as imu
 
@@ -41,18 +39,14 @@ def flatten_dict(d:dict, parent_key='', sep='.'):
 class MLflowHook(Hook):
 
     def __init__(self,
-                 tags:Optional[dict[str,str]] = None,
+                 log_interval: int = 1,
                  ) -> None:
-        self.tags = {}
-        if tags:
-            self.tags.update(tags)
-        self.metric_sums: dict[str,list] = defaultdict(list)
+        self.log_interval = log_interval
+        self.val_metric_sums: dict[str,list] = defaultdict(list)
+        self.best_val_acc: dict[str,float]= defaultdict(float)
 
     def before_run(self, runner:Runner) -> None:
         
-        self.tags.update(experiment_id=runner.experiment_name)
-        mlflow.start_run(tags=self.tags)
-
         cfg = Path(runner.log_dir + '/vis_data' + '/config.py')
         mlflow.log_artifact(str(cfg))
 
@@ -98,7 +92,6 @@ class MLflowHook(Hook):
     def before_train_epoch(self, runner:Runner) -> None:
         self.metric_sum: dict[str, float] = defaultdict(float)
         self.num_batches = 0
-        # self.last_outputs = {} 
 
     def after_train_iter(self, runner:Runner, batch_idx: int, data_batch: dict, outputs: dict) -> None:
         self.num_batches += 1
@@ -112,8 +105,10 @@ class MLflowHook(Hook):
             self.metric_sum[key] += value
 
         
-
     def after_train_epoch(self, runner:Runner) -> None:
+        if not runner.epoch % self.log_interval == 0:
+            return
+        
         for key, total_value in self.metric_sum.items():
             avg_value = total_value / self.num_batches
             self.metric_sum[key] = avg_value
@@ -126,9 +121,15 @@ class MLflowHook(Hook):
 
     def after_val_epoch(self, runner:Runner, metrics: dict) -> None:
         for key, value in metrics.items():
-            self.metric_sums[key].append(value)
+            self.val_metric_sums[key].append(value)
 
+            if value >= self.best_val_acc[key]:
+                self.best_val_acc[key] = value
+                mlflow.log_metric(f'best_{key}',value,step=runner.epoch)
+         
         mlflow.log_metrics(metrics=metrics,step=runner.epoch)
+
+
 
     
     def after_test_epoch(self, runner:Runner, metrics: dict) -> None:
@@ -148,7 +149,5 @@ class MLflowHook(Hook):
         last_epoch = os.path.join(work_dir,f'epoch_{runner.max_epochs}.pth')
         mlflow.log_artifact(last_epoch)
 
-        avg_metrics = {f'average_{key}': sum(value) / len(value) for key, value in self.metric_sums.items()}
-        mlflow.log_metrics(avg_metrics)
-
-        mlflow.end_run()
+        val_avg_metrics = {f'average_{key}': sum(value) / len(value) for key, value in self.val_metric_sums.items()}
+        mlflow.log_metrics(val_avg_metrics)
