@@ -124,6 +124,7 @@ work_dirs/
 /projects/*/work_dirs
 /projects/*/data
 .DS_Store
+/pretrained_weights/*
 
 # Pytorch
 *.pth
