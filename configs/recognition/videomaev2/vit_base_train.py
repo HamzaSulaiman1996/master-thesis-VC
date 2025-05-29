@@ -20,7 +20,7 @@ model = dict(
     ),
     cls_head=dict(
         type='TimeSformerHead',
-        num_classes=4,
+        num_classes=3,
         in_channels=768,
         average_clips='prob',
         label_smooth_eps = 0.1,
@@ -35,36 +35,25 @@ model = dict(
 
 
 dataset_type = 'VideoDataset'
-data_root = '../../datasets/ssv2_dataset/20bn-something-something-v2/'
-data_root_val = '../../datasets/ssv2_dataset/20bn-something-something-v2/'
-ann_file_train = './tools/data/sthv2/subsets/single_class_1/100_samples/train.txt'
-ann_file_val = './tools/data/sthv2/subsets/single_class_1/100_samples/val.txt'
+data_root_train = '../../datasets/data/train/'
+data_root_val = '../../datasets/data/val/'
+ann_file_train = './tools/data/sthv2/subsets/office_data/train.txt'
+ann_file_val = './tools/data/sthv2/subsets/office_data/val.txt'
 
 num_epochs = 80
-tags = {
-    "Issue_id":"AFC-3691",
-    # "Model":"VTN_RES50",
-    }
-
 
 file_client_args = dict(io_backend='disk')
 train_pipeline = [
     dict(type='DecordInit',**file_client_args),
     dict(
-        type='SampleFrames',
+        type='UniformSampleFrames',
         clip_len=16,
-        frame_interval=2,
+        num_clips=1,
     ),
-    # dict(type='UniformSampleFrames',clip_len=16,num_clips=1),
     dict(type='DecordDecode'),
-    dict(type='PytorchVideoWrapper', op='RandAugment', magnitude=0, num_layers=4),
-    dict(type='Resize', scale=(-1, 256)),
-    dict(
-        type='MultiScaleCrop',
-        input_size=224,
-        scales=(1, 0.875, 0.75, 0.66),
-        random_crop=False,
-        max_wh_scale_gap=1),
+    dict(type='TorchVisionWrapper', op='RandomVerticalFlip',p=0.3),
+    dict(type='TorchVisionWrapper', op='RandomHorizontalFlip',p=0.3),
+    dict(type='TorchVisionWrapper', op='GaussianBlur',kernel_size=3),
     dict(type='Resize', scale=(224, 224), keep_ratio=False),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
@@ -72,18 +61,13 @@ train_pipeline = [
 
 val_pipeline = [
     dict(type='DecordInit',**file_client_args),
-    # dict(type='UniformSampleFrames',clip_len=16,num_clips=2,test_mode=True),
     dict(
-        type='SampleFrames',
+        type='UniformSampleFrames',
         clip_len=16,
-        frame_interval=2,
-        num_clips=3,
+        num_clips=9,
         test_mode=True),
     dict(type='DecordDecode'),
-    
-    dict(type='Resize', scale=(-1, 224)),
-    # dict(type='Resize', scale=(224, 224), keep_ratio=False),
-    dict(type='ThreeCrop', crop_size=224),
+    dict(type='Resize', scale=(224, 224), keep_ratio=False),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
@@ -91,7 +75,7 @@ val_pipeline = [
 train_dataset_cfg =dict(
     type=dataset_type,
     ann_file=ann_file_train,
-    data_prefix=dict(video=data_root),
+    data_prefix=dict(video=data_root_train),
     pipeline=train_pipeline)
 
 
@@ -106,7 +90,8 @@ train_dataloader = dict(
 batch_size=16,
 num_workers=8,
 persistent_workers=True,
-sampler=dict(type='DefaultSampler', shuffle=True),
+sampler=dict(type='weighted_sampler',num_samples=400),
+batch_sampler=dict(type='batch_sampler',drop_last=True),
 dataset=train_dataset_cfg,
 )
 
@@ -151,9 +136,8 @@ default_hooks = dict(
 
 custom_hooks = [
     dict(type ='ConfusionMatrixHook',
-         class_map="./tools/data/sthv2/subsets/class_map.json"),
+         class_map="./tools/data/sthv2/subsets/office_data/label_mapping.json"),
     dict(
         type="MLflowHook",
-        tags=tags,
         ),
     ]
