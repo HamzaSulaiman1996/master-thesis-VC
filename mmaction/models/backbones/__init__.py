@@ -27,6 +27,7 @@ from .x3d import X3D
 from .resnet_vtn import RESNET_BACKBONE
 from .vit_2d import ViT2D, ViTubelet
 from .regnet import Regnet
+from .resnet_tubelet import Resnet50
 
 __all__ = [
     'AAGCN', 'C2D', 'C3D', 'MViT', 'MobileNetV2', 'MobileNetV2TSM',
@@ -34,7 +35,7 @@ __all__ = [
     'ResNet3dLayer', 'ResNet3dSlowFast', 'ResNet3dSlowOnly', 'ResNetAudio',
     'ResNetTIN', 'ResNetTSM', 'STGCN', 'SwinTransformer3D', 'TANet',
     'TimeSformer', 'UniFormer', 'UniFormerV2', 'VisionTransformer', 'X3D',
-    'RGBPoseConv3D', 'RESNET_BACKBONE','ViT2D','Regnet','ViTubelet',
+    'RGBPoseConv3D', 'RESNET_BACKBONE','ViT2D','Regnet','ViTubelet','Resnet50',
 ]
 
 try:
