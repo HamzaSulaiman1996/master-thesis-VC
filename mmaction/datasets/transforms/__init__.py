@@ -18,7 +18,7 @@ from .processing import (CenterCrop, ColorJitter, Flip, Fuse, MultiScaleCrop,
                          RandomCrop, RandomRescale, RandomResizedCrop, Resize,
                          TenCrop, ThreeCrop)
 from .text_transforms import CLIPTokenize
-from .wrappers import ImgAug, PytorchVideoWrapper, TorchVisionWrapper
+from .wrappers import ImgAug, PytorchVideoWrapper, TorchVisionWrapper, CustomPytorchVideoWrapper
 
 __all__ = [
     'ArrayDecode', 'AudioFeatureSelector', 'BuildPseudoClip', 'CenterCrop',
@@ -37,5 +37,5 @@ __all__ = [
     'SampleAVAFrames', 'SampleFrames', 'TenCrop', 'ThreeCrop', 'ToMotion',
     'TorchVisionWrapper', 'Transpose', 'UniformSample', 'UniformSampleFrames',
     'UntrimmedSampleFrames', 'MMUniformSampleFrames', 'MMDecode', 'MMCompact',
-    'CLIPTokenize'
+    'CLIPTokenize','CustomPytorchVideoWrapper'
 ]

@@ -7,6 +7,70 @@ from mmcv.transforms import BaseTransform, to_tensor
 from mmengine.utils import digit_version
 
 from mmaction.registry import TRANSFORMS
+from .rand_augment import RandAugment
+
+
+@TRANSFORMS.register_module()
+class CustomPytorchVideoWrapper(BaseTransform):
+    """PytorchVideoTrans Augmentations, under pytorchvideo.transforms.
+
+    Args:
+        op (str): The name of the pytorchvideo transformation.
+    """
+
+    def __init__(self, op='RandAugment', **kwargs):
+        
+        trans = RandAugment
+        self.trans = trans(**kwargs)
+        self.op = op
+
+    def transform(self, results):
+        """Perform PytorchVideoTrans augmentations.
+
+        Args:
+            results (dict): The resulting dict to be modified and passed
+                to the next transform in pipeline.
+        """
+        assert 'imgs' in results
+
+        assert 'gt_bboxes' not in results,\
+            f'PytorchVideo {self.op} doesn\'t support bboxes yet.'
+        assert 'proposals' not in results,\
+            f'PytorchVideo {self.op} doesn\'t support bboxes yet.'
+
+        if self.op in ('AugMix', 'RandAugment'):
+            # list[ndarray(h, w, 3)] -> torch.tensor(t, c, h, w)
+            imgs = [x.transpose(2, 0, 1) for x in results['imgs']]
+            imgs = to_tensor(np.stack(imgs))
+        else:
+            # list[ndarray(h, w, 3)] -> torch.tensor(c, t, h, w)
+            # uint8 -> float32
+            imgs = to_tensor((np.stack(results['imgs']).transpose(3, 0, 1, 2) /
+                              255.).astype(np.float32))
+
+        imgs = self.trans(imgs).data.numpy()
+
+        if self.op in ('AugMix', 'RandAugment'):
+            imgs[imgs > 255] = 255
+            imgs[imgs < 0] = 0
+            imgs = imgs.astype(np.uint8)
+
+            # torch.tensor(t, c, h, w) -> list[ndarray(h, w, 3)]
+            imgs = [x.transpose(1, 2, 0) for x in imgs]
+        else:
+            # float32 -> uint8
+            imgs = imgs * 255
+            imgs[imgs > 255] = 255
+            imgs[imgs < 0] = 0
+            imgs = imgs.astype(np.uint8)
+
+            # torch.tensor(c, t, h, w) -> list[ndarray(h, w, 3)]
+            imgs = [x for x in imgs.transpose(1, 2, 3, 0)]
+
+        results['imgs'] = imgs
+
+        return results
+
 
 
 @TRANSFORMS.register_module()
